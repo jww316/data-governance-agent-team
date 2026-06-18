@@ -561,9 +561,91 @@ input[type="text"] {
   color: var(--ink-3);
 }
 
+/* --- Relationship graph (M8) ----------------------------------------------- */
+.graph-section {
+  margin-top: 1.5rem;
+}
+.gov-graph {
+  height: 420px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.gov-graph .react-flow__attribution {
+  display: none;
+}
+.graph-legend {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.graph-legend .lg {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  border: 1.5px solid;
+}
+.graph-legend .lg-pass {
+  color: var(--pass);
+  background: var(--pass-soft);
+  border-color: var(--pass);
+}
+.graph-legend .lg-block {
+  color: var(--block);
+  background: var(--block-soft);
+  border-color: var(--block);
+}
+.graph-legend .lg-escalate {
+  color: var(--escalate);
+  background: var(--escalate-soft);
+  border-color: var(--escalate);
+}
+.graph-legend .lg-gray {
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border: 1.5px dashed var(--border-strong);
+}
+
 /* --- Audit panel ----------------------------------------------------------- */
 .audit-panel {
   margin-top: 2rem;
+}
+.a-toggle {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+}
+.a-caret {
+  display: inline-block;
+  transition: transform 0.15s;
+  color: var(--ink-3);
+  font-size: 0.8rem;
+}
+.a-caret.open {
+  transform: rotate(90deg);
+}
+.a-replay {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+.a-graph {
+  margin-top: 0.75rem;
 }
 .audit-entry {
   border: 1px solid var(--border);

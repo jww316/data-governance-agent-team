@@ -72,7 +72,9 @@ export function buildSystemPrompt(contract: AgentContract): string {
     ``,
     `OUTPUT FORMAT — return STRICT JSON only. No prose, no markdown, no code fences.`,
     `Exactly this shape:`,
-    `{"verdict": "<one of ${contract.verdicts.join("|")}>", "reasoning": "<concise, 1-3 sentences citing the specific rule/field that drove the verdict>", "details": { ... any structured findings ... }}`
+    `{"verdict": "<one of ${contract.verdicts.join("|")}>", "reasoning": "<concise, 1-3 sentences citing the specific rule/field that drove the verdict>", "details": { ... any structured findings ... }}`,
+    `In "details", when you evaluated specific named policies from policies.yaml,`,
+    `include "policies_evaluated": [<policy keys>] (e.g. ["pii_protection","cross_border"]).`
   );
   return lines.join("\n");
 }
