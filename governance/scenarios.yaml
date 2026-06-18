@@ -1,0 +1,77 @@
+# scenarios.yaml
+# Templates for Feature 2 (file landing / asynchronous monitor). The generator
+# fills these with data within the scenario's boundary, so agents have something
+# real to find. Each scenario is engineered to drive a SPECIFIC verdict so the
+# recorded demo reliably shows PASS, BLOCK, and ESCALATE.
+#
+# GENERATOR NAMESPACE
+#   Each field declares how its value is generated via `generator:`.
+#     faker.<provider>   -> a REAL Faker provider, called as-is (e.g. faker.email).
+#     custom.<helper>    -> a helper defined in the demo's generator code, NOT a
+#                           Faker built-in. The custom helpers are:
+#       custom.pattern        : formatted string from a pattern (e.g. "PRD-####")
+#       custom.contact_sentence: free text with an email/phone embedded (used to
+#                                hide undeclared PII inside a notes field)
+#       custom.fixed          : a constant value supplied via `value:`
+#       custom.choice         : a random pick from a supplied `options:` list
+#   Extra keys: `constraint:` ties the value to a quality rule in policies.yaml;
+#   `pii:` is the TRUE nature of the field; `declared_pii:` is what the incoming
+#   file claims — the gap between them is what the Classification agent catches.
+
+scenarios:
+
+  - id: public_reference_clean
+    label: Public reference data (clean)
+    expected_verdict: PASS
+    description: >
+      A product reference export. No sensitive fields, all quality rules satisfied.
+      Demonstrates the routine 80% — agents pass it without human involvement.
+    fields:
+      - { name: product_code, generator: custom.pattern, pattern: "PRD-####", pii: false }
+      - { name: product_name, generator: faker.word, pii: false }
+      - { name: list_price, generator: faker.pydecimal, constraint: non_negative, pii: false }
+      - { name: currency, generator: faker.currency_code, constraint: iso_4217, pii: false }
+    state_attributes:
+      domain: Reference
+      contains_pii: false
+      cross_jurisdictional_consumption: false
+
+  - id: support_export_hidden_pii
+    label: Customer support export (hidden PII in notes)
+    expected_verdict: BLOCK
+    description: >
+      A support-ticket export whose free-text 'notes' field contains emails and
+      phone numbers the uploader did not declare. Classification/PII agent must
+      detect undeclared PII with no protective policy attached -> BLOCK. The
+      magic moment: the agent catches what the generator slipped in.
+    fields:
+      - { name: ticket_id, generator: custom.pattern, pattern: "TKT-#####", pii: false }
+      - { name: customer_email, generator: faker.email, pii: true, declared_pii: false }
+      - { name: notes, generator: custom.contact_sentence, pii: true, declared_pii: false }
+    state_attributes:
+      domain: Customer
+      contains_pii: true          # true in reality; file arrives undeclared
+      declared_contains_pii: false
+      cross_jurisdictional_consumption: false
+
+  - id: eu_marketing_no_consent
+    label: EU customer list for marketing (no consent)
+    expected_verdict: ESCALATE
+    description: >
+      An EU-origin customer list flagged for a US marketing campaign, with no
+      consent_marketing basis and a new consuming geography. This is the book's
+      scenario #5 — jurisdictional judgment in the 20%. Policy/Jurisdiction agent
+      ESCALATES; Assignment agent routes to Privacy Steward + DPO.
+    fields:
+      - { name: customer_id, generator: faker.uuid4, pii: false }
+      - { name: full_name, generator: faker.name, pii: true, declared_pii: true }
+      - { name: email, generator: faker.email, pii: true, declared_pii: true }
+      - { name: country_of_residence, generator: custom.choice, options: [DE, FR, IE], pii: false }
+      - { name: consent_marketing, generator: custom.fixed, value: false, pii: false }
+    state_attributes:
+      domain: Customer
+      contains_pii: true
+      originating_geo: EU
+      cross_jurisdictional_consumption: true
+      consuming_geos: [US]
+      intended_use: marketing

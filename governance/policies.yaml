@@ -1,0 +1,53 @@
+# policies.yaml
+# The policy definitions agents are bound by. Declarative on purpose: agents READ
+# these, they are not welded into code. This file is the "governance as data" point
+# made literal — a reader can open it and see exactly what the agents enforce.
+
+pii_protection:
+  description: Protections required whenever a column is PII.
+  requires_security_policies: [usage_policy]
+  requires_for_direct_identifier: [usage_policy, sharing_policy]
+  min_security_classification: Confidential
+  rule: >
+    Any PII column must have its required security policies attached and the
+    asset classified at least Confidential. PII present + missing policy = BLOCK.
+
+usage_policy:
+  description: Governs permitted internal use of an asset.
+  applies_to_classification: [Confidential, Restricted]
+
+sharing_policy:
+  description: Governs sharing/disclosure of an asset outside its origin.
+  applies_to_classification: [Confidential, Restricted]
+
+retention_policy:
+  description: Minimum/maximum retention windows.
+  customer_min_retention_days: 365
+  rule: Retention below the minimum for a domain = BLOCK.
+
+cross_border:
+  description: Cross-jurisdictional transfer and consumption rules.
+  lawful_basis_required:
+    EU:
+      marketing_use_requires: consent_marketing
+      rule: >
+        EU-origin PII consumed for marketing requires consent_marketing=true.
+        Missing lawful basis = BLOCK.
+  new_consuming_geo:
+    rule: >
+      Adding a consuming geography that creates a transfer not covered by an
+      approved sharing_policy = ESCALATE for human cross-border review.
+
+quality_rules:
+  non_negative: Value must be >= 0.
+  currency_scale_2: Numeric must have at most 2 decimal places.
+  iso_4217: Must be a valid ISO-4217 currency code (e.g., USD, EUR).
+  enum_order_status: Must be one of [pending, paid, shipped, cancelled, refunded].
+  health_no_degrade: A change must not degrade data_quality_health without an exception.
+
+escalation_principle:
+  description: The 80/20 split from the book.
+  rule: >
+    Roughly 80% of governance decisions are routine and agent-resolvable.
+    The remaining ~20% — jurisdictional judgment, novel categories, material
+    blast radius — are ESCALATED to the named human steward, never guessed.

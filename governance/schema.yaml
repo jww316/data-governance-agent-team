@@ -1,0 +1,111 @@
+# schema.yaml
+# The governed data assets. Each table carries STATE ATTRIBUTES (per Ch.20 of
+# "The Goal is Autonomous Governance") — the descriptive settings that drive
+# decision-rights routing. Agents read these attributes to decide what applies.
+#
+# This file represents the CURRENT, approved state of the schema. A developer's
+# proposed change (the PR diff in Feature 1) is evaluated AGAINST this baseline.
+
+tables:
+
+  customers:
+    description: >
+      Master customer record supporting the CRM / Lead-to-Revenue and
+      Order-to-Cash capability flows. PII- and jurisdiction-bearing.
+    state_attributes:
+      domain: Customer
+      security_classification: Confidential
+      contains_pii: true
+      location_zone: Gold
+      data_quality_health: Green
+      related_security_policies: [usage_policy, sharing_policy, retention_policy]
+      regulatory_jurisdictions: [US-CA, EU]
+      originating_geo: US
+      cross_jurisdictional_consumption: true
+      consuming_geos: [US, EU, CA]
+    columns:
+      - name: customer_id
+        type: uuid
+        nullable: false
+        pii: false
+        notes: Primary key.
+      - name: full_name
+        type: text
+        nullable: false
+        pii: true
+        pii_category: direct_identifier
+        notes: Direct identifier. Covered by usage_policy.
+      - name: email
+        type: text
+        nullable: false
+        pii: true
+        pii_category: direct_identifier
+        notes: Contact + identifier. Covered by usage_policy, sharing_policy.
+      - name: phone
+        type: text
+        nullable: true
+        pii: true
+        pii_category: direct_identifier
+      - name: country_of_residence
+        type: text
+        nullable: false
+        pii: false
+        notes: Drives jurisdiction evaluation. Values are ISO country codes.
+      - name: consent_marketing
+        type: boolean
+        nullable: false
+        pii: false
+        notes: Lawful-basis flag. Required before any marketing use (EU).
+      - name: created_at
+        type: timestamptz
+        nullable: false
+        pii: false
+
+  orders:
+    description: >
+      Order header supporting Order-to-Cash. Quality- and lineage-sensitive;
+      references customers (a PII-bearing parent).
+    state_attributes:
+      domain: Order
+      security_classification: Internal
+      contains_pii: false
+      location_zone: Gold
+      data_quality_health: Green
+      related_security_policies: [usage_policy]
+      regulatory_jurisdictions: [US-CA, EU]
+      originating_geo: US
+      cross_jurisdictional_consumption: false
+      consuming_geos: [US]
+    columns:
+      - name: order_id
+        type: uuid
+        nullable: false
+        pii: false
+        notes: Primary key.
+      - name: customer_id
+        type: uuid
+        nullable: false
+        pii: false
+        foreign_key: customers.customer_id
+        notes: >
+          Lineage edge to customers. Inherits sensitivity context from a
+          PII-bearing parent — Relationship/Lineage agent watches this.
+      - name: order_total
+        type: numeric
+        nullable: false
+        pii: false
+        quality_rules: [non_negative, currency_scale_2]
+      - name: currency
+        type: text
+        nullable: false
+        pii: false
+        quality_rules: [iso_4217]
+      - name: status
+        type: text
+        nullable: false
+        pii: false
+        quality_rules: [enum_order_status]
+      - name: created_at
+        type: timestamptz
+        nullable: false
+        pii: false

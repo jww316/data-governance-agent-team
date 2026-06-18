@@ -1,0 +1,59 @@
+# decision_rights_matrix.yaml
+# The routing layer — the intersection of ROLES x ASSETS x ASSET-STATES (Ch.20,
+# "The Goal is Autonomous Governance"). Two jobs:
+#   1) AGENT ROUTING: which agents are invoked for a change, based on asset state.
+#      (Deterministic by design — governance is a control plane, not emergent.)
+#   2) STEWARD RESOLUTION: which named human owns a decision/escalation, across
+#      the compliance, technical, and business-domain dimensions.
+
+# --- 1. AGENT ROUTING -------------------------------------------------------
+# A change wakes only the agents whose conditions match the asset's state.
+# This is the matrix doing routing, visibly — not every agent on every change.
+agent_routing:
+  - when: { contains_pii: true }
+    invoke: [classification_pii, policy_jurisdiction]
+  - when: { cross_jurisdictional_consumption: true }
+    invoke: [policy_jurisdiction]
+  - when: { has_quality_rules: true }
+    invoke: [quality]
+  - when: { has_foreign_key: true }
+    invoke: [relationship_lineage]
+  - when: { always: true }            # assignment always runs last to route outcomes
+    invoke: [assignment_steward]
+
+# --- 2. STEWARD RESOLUTION --------------------------------------------------
+# Who is responsible, by the combination of asset-state settings. Dynamic, not
+# static: as attributes change, the resolved steward changes. Names are illustrative.
+steward_resolution:
+  dimensions: [compliance, technical, business]
+
+  rules:
+    - match: { domain: Customer, contains_pii: true }
+      stewards:
+        compliance:
+          privacy_steward: Dana Okoro
+          data_protection_officer: Jan Walker
+        technical:
+          data_quality_steward: Sue Hand
+        business:
+          business_steward: Marcus Reed
+    - match: { domain: Order }
+      stewards:
+        compliance:
+          privacy_steward: Dana Okoro
+        technical:
+          data_quality_steward: Sue Hand
+        business:
+          business_steward: Priya Nair
+
+  cross_border_review:
+    # The book's scenario #5 — requires governance + privacy stewards together.
+    match: { cross_jurisdictional_consumption: true }
+    stewards: [Dana Okoro, Jan Walker]
+
+  governance_lead: Alex Whitfield      # fallback for coverage gaps / conflicts
+
+  fairness:
+    rule: >
+      Where multiple stewards are eligible for one dimension, balance assignment
+      across them to keep workload equitable (book, Ch.20).
