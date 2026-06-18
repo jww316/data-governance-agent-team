@@ -11,7 +11,8 @@
     "check:governance": "tsx scripts/check-governance.ts",
     "check:routing": "tsx scripts/check-routing.ts",
     "check:agent": "tsx scripts/check-agent.ts",
-    "check:orchestrator": "tsx scripts/check-orchestrator.ts"
+    "check:orchestrator": "tsx scripts/check-orchestrator.ts",
+    "check:graph": "tsx scripts/check-graph.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",
@@ -20,7 +21,8 @@
     "js-yaml": "^4.1.0",
     "next": "^15.5.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "reactflow": "^11.11.4"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

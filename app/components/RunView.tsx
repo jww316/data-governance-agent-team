@@ -2,11 +2,20 @@
 
 import { useEffect, useRef } from "react";
 import type { RunEvent, StewardAssignment } from "@/lib/governance";
+import type { RosterEntry } from "@/lib/graph";
 import type { RunState } from "./useRun";
 import { VerdictBadge } from "./VerdictBadge";
+import { GovGraphView } from "./GovGraphView";
+import { GraphLegend } from "./GraphLegend";
 
 /** Renders the streamed log (the hero element) plus a final result summary. */
-export function RunView({ state }: { state: RunState }) {
+export function RunView({
+  state,
+  roster,
+}: {
+  state: RunState;
+  roster: RosterEntry[];
+}) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -44,6 +53,18 @@ export function RunView({ state }: { state: RunState }) {
       {state.error && (
         <div className="team-result BLOCK" role="alert">
           <strong>Run error:</strong>&nbsp;{state.error}
+        </div>
+      )}
+
+      {state.events.some((e) => e.type === "routing") && (
+        <div className="graph-section">
+          <div className="stream-head">
+            <div className="section-label" style={{ margin: 0 }}>
+              Relationship path
+            </div>
+            <GraphLegend />
+          </div>
+          <GovGraphView events={state.events} roster={roster} />
         </div>
       )}
 

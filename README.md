@@ -37,6 +37,15 @@ on-thesis ESCALATE (EU data, marketing use, no consent).
 Both features stream their run live (Server-Sent Events) and append to a local
 **audit log** — the auditable trail.
 
+**Relationship graph (M8).** Every run also renders a left-to-right **relationship
+graph** (React Flow) of the path it took: origin → state attributes → agents →
+policies → outcome → stewards. Invoked agents are colored by their verdict;
+un-invoked agents are grayed/dashed to show the matrix narrowed the team; each
+state→agent edge is labeled with the matrix rule that triggered it. The graph is
+built purely from the run's `RunEvent` stream (`lib/graph.ts`) — no new engine
+logic — and is **persisted on each audit entry**, so any past decision reopens as
+its exact traceable path.
+
 ## The governed data (the source of truth)
 
 Everything the engine enforces lives as declarative YAML under
@@ -97,6 +106,7 @@ npm run check:governance     # M1 — all YAML parses
 npm run check:routing        # M2 — routing is matrix-driven (no API key needed)
 npm run check:agent          # M3 — a single real agent call BLOCKs / PASSes
 npm run check:orchestrator   # M4 — three scenarios produce PASS / BLOCK / ESCALATE
+npm run check:graph          # M8 — each scenario's relationship graph matches its events
 ```
 
 `check:agent` and `check:orchestrator` make real Anthropic calls, so they need
@@ -115,6 +125,7 @@ lib/
   generator.ts         Faker + custom helpers for scenario data
   github.ts            open the real PR + post the verdict (Feature 1)
   audit.ts             append + read the audit log (data/audit-log.json)
+  graph.ts             build the relationship graph from a run's events (M8)
   adapters.ts          turn each feature's input into a shared Change
   sse.ts               Server-Sent Events helper
 app/
@@ -159,6 +170,21 @@ Decisions made during the autonomous build, per IMPLEMENTATION.md §13:
   required only when some agent actually blocked or escalated — not merely because
   an asset is consumed cross-border in an already-approved way. Otherwise every
   routine edit to a cross-jurisdictional table would escalate and never PASS.
+
+- **M8 relationship graph:** `lib/graph.ts` is a pure, serializable builder over
+  the `RunEvent` stream (§15.4) — the same builder feeds the live view and the
+  persisted replay. The full agent roster (needed to gray un-invoked agents) is
+  passed in (the client has it via the governance view; the server via the
+  loader), so the builder stays a pure function of `(events, roster)`. The policy
+  column prefers each agent's `details.policies_evaluated` when present and falls
+  back to a small per-agent policy map, so the acceptance paths
+  (Classification→`pii_protection`, Policy→`cross_border`) render reliably even if
+  a model omits the list. Built with `reactflow` v11 and a deterministic columnar
+  layout (no force/physics) so runs record identically. `buildGraph` accepts either
+  a live event stream or a stored audit entry: entries recorded before the graph
+  existed have no saved graph, so `/api/audit` reconstructs one from their stored
+  `agentResults` (re-deriving the matched matrix rules by reverse-mapping the
+  invoked agents) — so every past decision still replays as a path.
 
 ### Conflicts reconciled (per IMPLEMENTATION.md's "follow DESIGN.md on conflict")
 

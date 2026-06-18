@@ -19,6 +19,7 @@ import { selectAgents } from "./routing";
 import { runAgent } from "./agents";
 import { resolveStewards } from "./steward";
 import { appendAudit } from "./audit";
+import { buildGraph } from "./graph";
 
 export type Emit = (event: RunEvent) => void | Promise<void>;
 
@@ -80,10 +81,18 @@ function summarize(change: Change): string {
  */
 export async function runGovernance(
   change: Change,
-  emit: Emit,
+  rawEmit: Emit,
   hooks: RunHooks = {}
 ): Promise<RunResult> {
   const gov = loadGovernance();
+
+  // Collect every emitted event so the relationship graph can be built from the
+  // exact same stream the UI saw (§15.4) and persisted for replay.
+  const collected: RunEvent[] = [];
+  const emit: Emit = async (event) => {
+    collected.push(event);
+    await rawEmit(event);
+  };
 
   await emit({
     type: "run_started",
@@ -188,6 +197,10 @@ export async function runGovernance(
     await emit({ type: "github", ...github });
   }
 
+  // --- Relationship graph (built from this run's own events) ----------------
+  const roster = gov.agents.map((a) => ({ id: a.id, name: a.name }));
+  const graph = buildGraph({ events: collected, roster });
+
   // --- Audit ----------------------------------------------------------------
   const auditEntry = appendAudit({
     source: change.source,
@@ -197,6 +210,7 @@ export async function runGovernance(
     teamVerdict,
     stewards: assignment,
     github,
+    graph,
   });
   await emit({ type: "audit_written", auditId: auditEntry.id });
   await emit({ type: "run_complete", verdict: teamVerdict });

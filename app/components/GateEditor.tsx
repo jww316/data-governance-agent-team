@@ -229,7 +229,10 @@ export function GateEditor({
         )}
       </div>
 
-      <RunView state={run} />
+      <RunView
+        state={run}
+        roster={view.agents.map((a) => ({ id: a.id, name: a.name }))}
+      />
     </div>
   );
 }

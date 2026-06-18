@@ -12,6 +12,7 @@ import {
   StewardAssignment,
   Verdict,
 } from "./governance";
+import { GovGraph } from "./graph";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const AUDIT_FILE = path.join(DATA_DIR, "audit-log.json");
@@ -26,6 +27,8 @@ export interface AuditEntry {
   teamVerdict: Verdict;
   stewards?: StewardAssignment;
   github?: { prUrl?: string; prState?: string; skipped?: boolean };
+  /** The relationship graph built from this run's events, for replay (§15.4). */
+  graph?: GovGraph;
 }
 
 function ensureStore(): void {
