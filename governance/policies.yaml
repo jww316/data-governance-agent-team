@@ -32,11 +32,20 @@ cross_border:
       marketing_use_requires: consent_marketing
       rule: >
         EU-origin PII consumed for marketing requires consent_marketing=true.
-        Missing lawful basis = BLOCK.
+        A missing lawful basis WITHIN AN ALREADY-APPROVED transfer = BLOCK.
   new_consuming_geo:
     rule: >
       Adding a consuming geography that creates a transfer not covered by an
       approved sharing_policy = ESCALATE for human cross-border review.
+  precedence:
+    rule: >
+      When a change combines a NOVEL cross-border transfer (a new consuming geo
+      not covered by an approved sharing_policy) WITH an open lawful-basis
+      question (e.g., EU marketing with no consent on record), it is a genuine
+      jurisdictional judgment call — ESCALATE for human cross-border review (the
+      book's scenario #5, the reserved 20%), NOT an automatic BLOCK. Reserve
+      BLOCK for a missing lawful basis where the transfer itself is already
+      approved (no novel cross-border element).
 
 quality_rules:
   non_negative: Value must be >= 0.

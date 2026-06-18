@@ -71,7 +71,18 @@ scenarios:
     state_attributes:
       domain: Customer
       contains_pii: true
+      # The PII here is properly DECLARED and classified — the classification
+      # dimension is satisfied. The open question is jurisdictional (marketing
+      # use of EU data with no consent), which is what the Policy agent escalates.
+      security_classification: Confidential
+      related_security_policies: [usage_policy, sharing_policy]
       originating_geo: EU
       cross_jurisdictional_consumption: true
       consuming_geos: [US]
       intended_use: marketing
+      # The EU->US marketing transfer is NOVEL and not covered by an approved
+      # sharing_policy — this is the new cross-border element that, combined with
+      # the open consent question, makes it a human judgment call (ESCALATE),
+      # per policies.yaml cross_border.precedence.
+      new_consuming_geo: US
+      transfer_covered_by_sharing_policy: false
