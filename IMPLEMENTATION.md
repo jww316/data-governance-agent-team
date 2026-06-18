@@ -27,6 +27,7 @@ section already ruled out.
   doesn't need Opus). Make the model a single configurable constant.
 - **GitHub:** `@octokit/rest`.
 - **Faker:** `@faker-js/faker`.
+- **Relationship graph (M8):** `reactflow` for the node-edge path visualization.
 - **Audit log store:** a local JSON file (`data/audit-log.json`) is sufficient.
   SQLite is acceptable if preferred, but JSON keeps the repo zero-setup. Pick JSON
   unless there is a concrete reason not to.
@@ -75,6 +76,7 @@ governance-demo/
 │   ├── steward.ts                 # steward_resolution from the matrix
 │   ├── generator.ts               # faker + custom helpers for scenarios
 │   ├── github.ts                  # open PR + post verdict on throwaway repo
+│   ├── graph.ts                   # M8: build relationship graph from run events
 │   └── audit.ts                   # append + read audit log
 ├── app/
 │   ├── page.tsx                   # the two-feature UI (left panel + right stream)
@@ -285,6 +287,14 @@ Build in order. Do not advance until acceptance passes.
   *Accept:* a full run of both features records cleanly end-to-end; repo is
   publishable with no secrets.
 
+- **M8 — Relationship graph (post-M7 enhancement).** A visual node-edge graph of
+  the path each request took through the governed data. Builds live during a run
+  and is saved with each audit entry for replay. Full spec in §15.
+  *Accept:* running any request renders a graph whose path matches that run's
+  events; invoked agents are colored by verdict and un-invoked agents are grayed;
+  the matrix edge that triggered each agent is labeled; opening a past audit entry
+  re-renders its graph.
+
 ## 14. Definition of done
 
 - Both features run locally and record cleanly, showing PASS, BLOCK, and ESCALATE.
@@ -292,3 +302,90 @@ Build in order. Do not advance until acceptance passes.
   a real PR is opened and annotated.
 - The repo is public-ready: no secrets, clear README, governed data readable as
   files, DESIGN.md and IMPLEMENTATION.md included.
+
+---
+
+## 15. Relationship graph (M8) — full specification
+
+### 15.1 Purpose
+Visualize the **relationship path** each request takes through the governed data —
+the connective tissue between asset, state, agents, policies, and outcome. This
+makes two otherwise-invisible properties legible: (1) routing is matrix-driven and
+selective (some agents fire, others are deliberately excluded), and (2) every
+verdict has a traceable path, which is the Relationship Model's reason for existing
+(auditing and traceability). The graph is a second view over data already produced
+by the run; it requires no new backend logic.
+
+### 15.2 Node-and-edge model
+A request renders as a left-to-right flow across five node columns:
+
+1. **Origin** — the request/asset. One node.
+   - Gate: the table + the changed column(s) (e.g., "customers + national_id").
+   - Monitor: the scenario (e.g., "support export").
+2. **State attributes** — the effective attributes the router actually read
+   (e.g., `contains_pii=true`, `cross_jurisdictional_consumption=true`,
+   `declared_pii=false`). One node per attribute that participated in routing.
+3. **Agents** — one node per agent in the roster. Invoked agents are active and
+   colored by their own verdict; **un-invoked agents are rendered grayed/dashed**
+   to show the matrix narrowed the team. Assignment agent always present.
+4. **Policies** — one node per policy an invoked agent evaluated against
+   (e.g., `pii_protection`, `usage_policy`, `cross_border`).
+5. **Outcome** — the team verdict node (PASS/BLOCK/ESCALATE) and, on ESCALATE
+   (or BLOCK needing an owner), the resolved **steward** node(s).
+
+**Edges (the path):**
+- Origin → State attribute: "this asset has this attribute."
+- State attribute → Agent: labeled with the matrix rule that matched
+  (e.g., `matched: contains_pii`). This is the visual proof that routing came from
+  `decision_rights_matrix.yaml`, not from arbitrary code.
+- Agent → Policy: "this agent evaluated this policy."
+- Policy → Outcome (or Agent → Outcome): the contribution to the verdict.
+- Outcome(ESCALATE) → Steward: the resolved owner from `steward_resolution`.
+
+### 15.3 Visual encoding
+- **Verdict color** applied consistently to nodes and the edges along their path:
+  green = PASS, red = BLOCK, amber = ESCALATE (same semantic palette as the rest
+  of the UI, §1 Styling).
+- **Un-invoked agents:** gray fill, dashed border, no outgoing edges.
+- **Edge labels:** the matrix rule on state→agent edges; the policy clause on
+  policy→outcome edges where space allows.
+- **The blocking/escalating path is emphasized** (thicker or glowing edge) so the
+  "why" is followable at a glance on a recording.
+
+### 15.4 Data source — derive from existing RunEvents
+No new orchestrator logic. Build the graph from the `RunEvent` stream (§7):
+- `routing` → the agents selected (active) vs. the full roster (the rest grayed),
+  plus the matched matrix rules → state-attribute nodes and their edge labels.
+- `agent_result` → each invoked agent's verdict (node color) and the policies it
+  evaluated (from the agent's `details`) → policy nodes and agent→policy edges.
+- `assignment` → steward nodes and outcome→steward edges; any coverage gap shown.
+- `team_verdict` → the outcome node and the emphasized path color.
+
+Add a small pure builder, `lib/graph.ts: buildGraph(runEvents | auditEntry):
+{ nodes, edges }`, returning a serializable graph used by both the live and the
+saved-replay views. Persist the built graph (or enough to rebuild it) on the audit
+entry so historical runs replay identically.
+
+### 15.5 Rendering
+- Use **React Flow** (`reactflow`). It handles the columnar left-to-right layout,
+  per-node styling, edge labels, and is recording-friendly.
+- Provide a simple deterministic layout: fixed x-position per column (origin →
+  state → agents → policies → outcome), y-position distributed within each column.
+  Do not require a physics/force layout — a tidy, stable arrangement records better.
+- **Live mode:** subscribe to the same SSE stream as the log; add nodes/edges as
+  events arrive so the path draws itself during the run (place this beside or below
+  the streaming log so the two reinforce each other).
+- **Replay mode:** each audit-history entry is clickable and re-renders its saved
+  graph. This is the on-thesis view — every governed decision reopenable as its
+  traceable path.
+
+### 15.6 Acceptance criteria (restated)
+- The three monitor scenarios each render a graph whose path matches their events:
+  clean PASS (green, full benign path), hidden-PII BLOCK (red path through
+  Classification → pii_protection → BLOCK; Quality and Lineage grayed), and
+  EU-marketing ESCALATE (amber path through Policy & Jurisdiction → cross_border →
+  ESCALATE → Privacy Steward + DPO).
+- Un-invoked agents are visibly grayed in every run.
+- State→agent edges are labeled with the matched matrix rule.
+- Opening a past audit entry re-renders its graph identically to the live run.
+- Renders cleanly at recording resolution.
