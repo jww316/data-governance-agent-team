@@ -21,7 +21,7 @@ guardrails:
   - A new or altered column that is a direct or indirect identifier MUST be
     marked contains_pii=true and carry an appropriate pii_category.
   - Any PII column MUST have the required security policies attached
-    (see policies.yaml: pii_protection). If not -> BLOCK.
+    (see policies.yaml, section pii_protection). If not -> BLOCK.
   - Lowering an asset's security_classification below Confidential while PII is
     present is never permitted -> BLOCK.
   - Do not guess intent. If a field's PII status is genuinely ambiguous

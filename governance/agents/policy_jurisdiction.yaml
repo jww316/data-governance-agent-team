@@ -17,7 +17,12 @@ permitted_scope:
 
 guardrails:
   - Introducing PII consumable in a jurisdiction lacking a lawful basis
-    (e.g., EU data used for marketing without consent_marketing) -> BLOCK.
+    (e.g., EU data used for marketing without consent_marketing) -> BLOCK,
+    UNLESS the same change also introduces a NOVEL cross-border transfer (a new
+    consuming_geo not covered by an approved sharing_policy). That combination is
+    a jurisdictional judgment call -> ESCALATE for human cross-border review
+    (see policies.yaml cross_border precedence; the book's scenario 5), never an
+    automatic BLOCK.
   - Adding a consuming_geo that creates a cross-border transfer not covered by
     an approved sharing_policy -> ESCALATE (this is the book's scenario #5).
   - Changing retention below the policy minimum -> BLOCK.
