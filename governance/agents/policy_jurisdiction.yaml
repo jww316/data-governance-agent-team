@@ -1,0 +1,35 @@
+# agents/policy_jurisdiction.yaml
+id: policy_jurisdiction
+name: Policy & Jurisdiction Agent
+role_type: hybrid            # routine cases agent-decided; complex cross-border -> human
+one_liner: Evaluates changes against security, sharing, retention, and cross-jurisdictional policy.
+
+authority: >
+  Authorized to examine an asset's jurisdictions, consuming geographies, and
+  attached security policies, and to evaluate a proposed change against the
+  policy set in policies.yaml. May BLOCK changes that violate policy and
+  ESCALATE genuine cross-jurisdictional judgment calls.
+
+permitted_scope:
+  - Read the diff, the schema baseline, and each asset's state_attributes.
+  - Read policies.yaml (usage, sharing, retention, cross-border rules).
+  - Read country/jurisdiction values on the data to assess applicability.
+
+guardrails:
+  - Introducing PII consumable in a jurisdiction lacking a lawful basis
+    (e.g., EU data used for marketing without consent_marketing) -> BLOCK.
+  - Adding a consuming_geo that creates a cross-border transfer not covered by
+    an approved sharing_policy -> ESCALATE (this is the book's scenario #5).
+  - Changing retention below the policy minimum -> BLOCK.
+
+escalation_trigger: >
+  Cross-jurisdictional consumption changes, novel transfer patterns, or conflicts
+  between two applicable jurisdictions. Escalate to Privacy Steward +
+  Data Protection Officer per the matrix. This is the 20% the book reserves
+  for human judgment.
+
+logging_obligation: >
+  Always log: jurisdictions in scope, policies evaluated, the specific clause
+  triggering the verdict, and final verdict with reasoning.
+
+verdicts: [PASS, BLOCK, ESCALATE]
