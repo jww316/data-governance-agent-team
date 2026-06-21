@@ -15,6 +15,8 @@ The routing that decides *which* agents fire is **deterministic** (driven by a
 decision-rights matrix); only the agents' *judgment* is autonomous. That line —
 deterministic control plane, autonomous judgment — is the thesis.
 
+WATCH the demo video - https://www.prenticegate.com/dg-agent-team-demo
+
 See [`DESIGN.md`](./DESIGN.md) for the "what & why" and
 [`IMPLEMENTATION.md`](./IMPLEMENTATION.md) for the build plan.
 
