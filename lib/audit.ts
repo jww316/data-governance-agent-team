@@ -9,10 +9,23 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   AgentResult,
+  ChangeSource,
+  RunEvent,
+  StateResolutionOutcome,
   StewardAssignment,
   Verdict,
 } from "./governance";
 import { GovGraph } from "./graph";
+
+/**
+ * Part 2: the upstream state-resolution stages of a run. The stage events are
+ * stored as-is (concise summaries only, never hidden model reasoning), so a past
+ * run replays event → resolvers → state → delta → materiality exactly.
+ */
+export interface StateResolutionAudit {
+  outcome: StateResolutionOutcome;
+  events: RunEvent[];
+}
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const AUDIT_FILE = path.join(DATA_DIR, "audit-log.json");
@@ -20,7 +33,7 @@ const AUDIT_FILE = path.join(DATA_DIR, "audit-log.json");
 export interface AuditEntry {
   id: string;
   timestamp: string;
-  source: "gate" | "monitor";
+  source: ChangeSource;
   asset: { table?: string; scenarioId?: string; domain: string };
   summary: string;
   agentResults: AgentResult[];
@@ -29,6 +42,8 @@ export interface AuditEntry {
   github?: { prUrl?: string; prState?: string; skipped?: boolean };
   /** The relationship graph built from this run's events, for replay (§15.4). */
   graph?: GovGraph;
+  /** Part 2 runs only: the state-resolution stages (event → materiality). */
+  stateResolution?: StateResolutionAudit;
 }
 
 function ensureStore(): void {

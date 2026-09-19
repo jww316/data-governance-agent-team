@@ -1,0 +1,133 @@
+# scenario_crm_campaigncloud.yaml
+# The single Part 2 scenario (PART2_STATE_RESOLUTION_DESIGN.md §6).
+#
+# A U.S.-based CRM starts sending customer names and email addresses through an
+# API to CampaignCloud, an external marketing SaaS hosted in Germany.
+#
+# This file holds ONLY observations and evidence, never conclusions. Nothing here
+# says "contains_pii", "cross_border", or "purpose = marketing" outright. The
+# resolvers establish those facts from the evidence below (§4.3, §7).
+
+id: crm_to_campaigncloud
+label: CRM → CampaignCloud contact sync
+expected_verdict: ESCALATE
+description: >
+  A new API integration sends CRM customer records to CampaignCloud, an external
+  marketing SaaS hosted in Germany. The customer data itself is unchanged, but its
+  context changes, and so does its governed state. Four resolvers establish what is
+  now true. The deterministic assembler compares that to the prior state. The
+  existing agent team then finds it cannot establish that marketing is an
+  authorized purpose, so the verdict is ESCALATE.
+
+# The governed asset the event concerns.
+asset:
+  id: crm.customer
+  domain: Customer
+
+# --- 1. The observed technical event (intentionally incomplete) -------------
+observed_event:
+  event_id: EVT-1001
+  event_type: data_movement_created
+  asset_id: crm.customer
+  observed_change:
+    source_system: CRM
+    destination_system: CampaignCloud
+    mechanism: REST_API
+    source_structure: customer
+    destination_structure: campaign_contact
+  fields:
+    - customer_id
+    - full_name
+    - email_address
+  integration:
+    name: crm_to_campaigncloud_contact_sync
+    description: Synchronize eligible CRM contacts for outbound campaigns
+
+# --- 2. The evidence package (five families, §8) ----------------------------
+# Demo configuration standing in for inventory, catalog, lineage, vendor registry
+# and business metadata. No live enterprise integration is required.
+evidence:
+  technical_metadata:
+    source_of_record: system_inventory
+    source:
+      system: CRM
+      hosting_country: US
+      cloud_region: us-east-1
+      owner: Customer Operations
+    destination:
+      system: CampaignCloud
+      hosting_country: Germany
+      cloud_region: eu-central-1
+      owner: Marketing
+      vendor_owned: true
+
+  data_evidence:
+    taxonomy: enterprise_classification_taxonomy
+    catalog:
+      CRM.customer.customer_id:
+        classification: Internal
+        authoritative: true
+      CRM.customer.full_name:
+        classification: PII
+        authoritative: true
+      CRM.customer.email_address:
+        classification: PII
+        authoritative: true
+
+  relationship_evidence:
+    lineage:
+      source: CRM.customer
+      destination: CampaignCloud.campaign_contact
+      transfer_type: API
+
+  identity_evidence:
+    source_of_record: vendor_registry
+    destination_relationship:
+      system: CampaignCloud
+      organization: CampaignCloud Inc.
+      relationship_type: third_party_vendor
+      processing_role: data_processor
+
+  business_context:
+    integration_description: Synchronize eligible CRM contacts for outbound campaigns
+    destination_application_category: marketing_automation
+    destination_business_owner: Marketing
+
+# --- 3. Prior governed state (§19) ------------------------------------------
+# What was true of crm.customer before this event: internal US use for customer
+# service. Uses the same attribute names as the resolved state so they compare
+# cleanly.
+prior_state:
+  recorded_at: "2026-06-30T00:00:00Z"
+  recorded_by: governance baseline (illustrative)
+  attributes:
+    contains_pii: true
+    classification: personal_data
+    origin_location: US
+    destination_location: US
+    recipient_type: internal_application
+    processing_purpose: customer_service
+
+# The asset's existing approved governance posture. It passes through to the
+# governance agents unchanged, as the "current approved classification" Part 1
+# agents already expect (security classification, attached protective policies).
+governed_attributes:
+  security_classification: Confidential
+  related_security_policies: [usage_policy, sharing_policy, retention_policy]
+  regulatory_jurisdictions: [US]
+
+# --- 4. Decision evidence (§23) ---------------------------------------------
+# NOT used by state resolution. The downstream governance agents read this to make
+# the judgment. It is supplied only to agents whose contract permits it.
+decision_evidence:
+  vendor_agreement:
+    exists: true
+    reference: MSA-CampaignCloud-2026
+  data_processing_agreement:
+    exists: true
+    reference: DPA-CampaignCloud-2026
+  approved_processing_purposes:
+    - customer_service
+    - transaction_processing
+  marketing_authorization:
+    status: unknown

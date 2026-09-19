@@ -1,0 +1,18 @@
+# resolvers/recipient.yaml
+id: recipient_resolver
+name: Recipient Resolver
+question: Who or what is receiving, accessing, or processing the data?
+
+method: authoritative_lookup
+model_fallback: true
+authoritative_source: vendor registry relationship + processing role
+
+evidence_families: [identity_evidence, technical_metadata]
+
+outputs:
+  recipient_type: { taxonomy: recipient_type }
+  recipient_id: { type: identifier }
+
+guardrails:
+  - Establishes who the recipient is and its relationship to the enterprise. Must
+    NOT decide whether that recipient is approved to receive the data.

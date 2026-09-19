@@ -1,0 +1,18 @@
+# resolvers/location.yaml
+id: location_resolver
+name: Location Resolver
+question: Where is the data originating, and where is it going or being processed?
+
+method: authoritative_lookup
+model_fallback: true
+authoritative_source: application / system inventory hosting metadata
+
+evidence_families: [technical_metadata]
+
+outputs:
+  origin_location: { type: country }
+  destination_location: { type: country }
+
+guardrails:
+  - Establishes geographic facts only. Must NOT decide the applicable regulation,
+    the lawful basis, or any policy consequence.

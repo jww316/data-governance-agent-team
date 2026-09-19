@@ -1,0 +1,34 @@
+# assembly.yaml
+# Configuration for the deterministic State Assembler (§16, §18). No LLM runs here.
+
+# Minimum attribute confidence accepted as resolved. This is DEMO CONFIGURATION,
+# not a governance industry standard.
+confidence_threshold: 0.90
+
+# Every one of these must return status "resolved", or state resolution stops
+# before governance routing.
+required_resolvers:
+  - classification_resolver
+  - location_resolver
+  - recipient_resolver
+  - purpose_resolver
+
+# The routing state: the minimum facts needed to decide which governance
+# authorities get involved (§4.4, §18.2).
+routing_attributes:
+  - contains_pii
+  - classification
+  - origin_location
+  - destination_location
+  - recipient_type
+  - processing_purpose
+
+# Used by the derived-state rules (lib/state.ts):
+#   cross_border      = origin_location != destination_location
+#   external_transfer = recipient_type in external_recipient_types
+#   purpose_change    = prior.processing_purpose != current.processing_purpose
+external_recipient_types: [external_processor, external_partner]
+
+# The governance lead reviews state that cannot be assembled (unresolved,
+# conflicted, or failed). This reuses the matrix's existing
+# steward_resolution.governance_lead.

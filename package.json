@@ -12,7 +12,9 @@
     "check:routing": "tsx scripts/check-routing.ts",
     "check:agent": "tsx scripts/check-agent.ts",
     "check:orchestrator": "tsx scripts/check-orchestrator.ts",
-    "check:graph": "tsx scripts/check-graph.ts"
+    "check:graph": "tsx scripts/check-graph.ts",
+    "check:state-resolution": "tsx scripts/check-state-resolution.ts",
+    "check:part2": "tsx scripts/check-part2.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",

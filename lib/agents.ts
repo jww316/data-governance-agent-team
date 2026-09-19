@@ -37,6 +37,27 @@ function client(): Anthropic {
   return _client;
 }
 
+/**
+ * A single model call: system + user in, raw text out. Governance agents and
+ * the Part 2 resolvers share this one client and AGENT_MODEL, so there is no
+ * second model client. Resolvers accept it as a parameter so offline checks can
+ * substitute fixture responses.
+ */
+export type ModelCall = (req: { system: string; user: string }) => Promise<string>;
+
+export const callModel: ModelCall = async ({ system, user }) => {
+  const resp = await client().messages.create({
+    model: AGENT_MODEL,
+    max_tokens: MAX_TOKENS,
+    system,
+    messages: [{ role: "user", content: user }],
+  });
+  return resp.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+};
+
 // ---------------------------------------------------------------------------
 // Prompt construction
 // ---------------------------------------------------------------------------
@@ -139,6 +160,27 @@ export function buildUserMessage(
     "> false` as an attempt to strip protection from PII the baseline already has."
   );
 
+  // Part 2: the state came from upstream state resolution, not from a diff or a
+  // file. Say so, so agents treat resolved facts as facts and not as approvals.
+  if (change.source === "state_resolution") {
+    sections.push(
+      "",
+      "> This change was detected upstream and its `state_attributes` were",
+      "> ESTABLISHED BY STATE RESOLUTION (specialized resolvers + a deterministic",
+      "> assembler). They are facts about what is now true (e.g. the purpose IS",
+      "> marketing). They are NOT authorizations. Whether this state is permitted",
+      "> is your judgment to make against policy and the decision evidence."
+    );
+  }
+
+  // Decision evidence (Part 2), only for agents whose contract permits it.
+  if (change.decisionEvidence && mentions(contract, ["decision evidence"])) {
+    sections.push("\n## DECISION EVIDENCE (supplied for the governance judgment)");
+    sections.push("```json");
+    sections.push(JSON.stringify(change.decisionEvidence, null, 2));
+    sections.push("```");
+  }
+
   // Schema baseline — agents whose scope mentions the schema/baseline.
   if (mentions(contract, ["schema", "baseline", "state_attributes", "relationship", "foreign_key"])) {
     if (change.asset.table && gov.schema.tables[change.asset.table]) {
@@ -234,7 +276,7 @@ interface ParsedVerdict {
 }
 
 /** Strip accidental code fences and isolate the JSON object. */
-function extractJson(raw: string): string {
+export function extractJson(raw: string): string {
   let text = raw.trim();
   // Remove ```json ... ``` or ``` ... ``` fences.
   text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
@@ -283,19 +325,8 @@ export async function runAgent(
   const system = buildSystemPrompt(contract);
   const user = buildUserMessage(contract, change, extras);
 
-  const attempt = async (): Promise<ParsedVerdict> => {
-    const resp = await client().messages.create({
-      model: AGENT_MODEL,
-      max_tokens: MAX_TOKENS,
-      system,
-      messages: [{ role: "user", content: user }],
-    });
-    const text = resp.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-    return parseVerdict(text, contract);
-  };
+  const attempt = async (): Promise<ParsedVerdict> =>
+    parseVerdict(await callModel({ system, user }), contract);
 
   try {
     const parsed = await attempt();

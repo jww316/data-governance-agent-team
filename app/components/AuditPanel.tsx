@@ -5,6 +5,7 @@ import type { AuditEntry } from "@/lib/audit";
 import { VerdictBadge } from "./VerdictBadge";
 import { GovGraphView } from "./GovGraphView";
 import { GraphLegend } from "./GraphLegend";
+import { StateResolutionView } from "./StateResolutionView";
 
 /** The running history — the auditable trail credibility point (§11, §15.5). */
 export function AuditPanel({ entries }: { entries: AuditEntry[] }) {
@@ -53,13 +54,21 @@ export function AuditPanel({ entries }: { entries: AuditEntry[] }) {
                   </>
                 )}
               </div>
+              {open && e.stateResolution && (
+                <div className="a-graph">
+                  <div className="section-label" style={{ margin: 0 }}>
+                    Saved state resolution
+                  </div>
+                  <StateResolutionView events={e.stateResolution.events} />
+                </div>
+              )}
               {open && hasGraph && (
                 <div className="a-graph">
                   <div className="stream-head">
                     <div className="section-label" style={{ margin: 0 }}>
                       Saved relationship path
                     </div>
-                    <GraphLegend />
+                    <GraphLegend stateResolution={Boolean(e.stateResolution)} />
                   </div>
                   <GovGraphView graph={e.graph!} />
                 </div>

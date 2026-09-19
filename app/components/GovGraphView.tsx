@@ -25,7 +25,9 @@ const VERDICT_COLOR: Record<Verdict, string> = {
   ESCALATE: "#b5790b",
 };
 const NEUTRAL = "#7a8499";
-const COLUMN_X = [0, 250, 510, 770, 1030, 1280];
+const ACCENT = { border: "#2c5cc5", bg: "#eaf0fb", text: "#1a1f2b" };
+// Fixed x per column. Part 2 runs use four extra upstream columns (lib/graph.ts).
+const COLUMN_STEP = 256;
 const ROW_Y = 96;
 
 type Props =
@@ -47,10 +49,16 @@ export function GovGraphView(props: Props) {
   );
 
   if (graph.nodes.length === 0) return null;
+  const wide = graph.nodes.some((n) => n.kind === "event");
+  // Remount when the outcome changes. During a live run the outcome node exists
+  // before the verdict arrives, and an in-place label update was not always
+  // repainted. A fresh mount also re-fits the finished path.
+  const outcomeKey = graph.nodes.find((n) => n.kind === "outcome")?.label ?? "";
 
   return (
-    <div className="gov-graph">
+    <div className={`gov-graph${wide ? " wide" : ""}`}>
       <ReactFlow
+        key={outcomeKey}
         nodes={nodes}
         edges={edges}
         fitView
@@ -70,6 +78,22 @@ export function GovGraphView(props: Props) {
 }
 
 function nodeColor(n: GraphNode): { border: string; bg: string; text: string } {
+  // Part 2 nodes: the accent means "established state". A resolver that could
+  // not establish state takes the escalate or block color.
+  if (n.kind === "resolver") {
+    if (n.status === "unresolved") return { border: VERDICT_COLOR.ESCALATE, bg: tint("ESCALATE"), text: "#1a1f2b" };
+    if (n.status === "conflicted" || n.status === "failed") return { border: VERDICT_COLOR.BLOCK, bg: tint("BLOCK"), text: "#1a1f2b" };
+    return ACCENT;
+  }
+  if (n.kind === "event" || (n.kind === "delta" && n.status === "changed") || n.status === "material") {
+    return ACCENT;
+  }
+  if (n.kind === "delta" && n.status !== "unchanged" && n.status !== "changed") {
+    return { border: VERDICT_COLOR.ESCALATE, bg: tint("ESCALATE"), text: "#1a1f2b" };
+  }
+  if (n.kind === "delta" || n.kind === "materiality") {
+    return { border: "#cdd4de", bg: "#f7f8fa", text: "#4a5365" };
+  }
   if (n.kind === "agent" && !n.active) {
     return { border: "#cdd4de", bg: "#f1f3f6", text: "#9aa3b2" };
   }
@@ -108,7 +132,7 @@ function toReactFlow(graph: GovGraph): { nodes: Node[]; edges: Edge[] } {
 
     return {
       id: n.id,
-      position: { x: COLUMN_X[n.column], y },
+      position: { x: n.column * COLUMN_STEP, y },
       data: {
         label: (
           <div style={{ textAlign: "center", lineHeight: 1.25 }}>

@@ -10,22 +10,42 @@
 import {
   AgentResult,
   MatrixRoutingRule,
+  ResolverStatus,
   RunEvent,
   StewardAssignment,
   Verdict,
 } from "./governance";
 
-export type GraphColumn = 0 | 1 | 2 | 3 | 4 | 5;
+/**
+ * Column index, left to right. A Part 1 run uses 0–5. A Part 2 run adds four
+ * upstream columns (event, resolvers, state delta, materiality), and the Part 1
+ * columns shift right by PART2_OFFSET.
+ */
+export type GraphColumn = number;
+const PART2_OFFSET = 4;
 
 export interface GraphNode {
   id: string;
-  kind: "origin" | "state" | "agent" | "policy" | "outcome" | "steward";
+  kind:
+    | "origin"
+    | "state"
+    | "agent"
+    | "policy"
+    | "outcome"
+    | "steward"
+    // Part 2 (state resolution)
+    | "event"
+    | "resolver"
+    | "delta"
+    | "materiality";
   label: string;
   sublabel?: string;
   column: GraphColumn;
   /** Invoked agents are active; un-invoked agents are grayed (§15.2/15.3). */
   active: boolean;
   verdict?: Verdict;
+  /** Part 2: resolver status, or "changed"/"unchanged" for delta nodes. */
+  status?: ResolverStatus | "changed" | "unchanged" | "material" | "not_material";
 }
 
 export interface GraphEdge {
@@ -231,19 +251,28 @@ function buildFromEvents(events: RunEvent[], roster: RosterEntry[]): GovGraph {
       results.set(e.agentId, { verdict: e.verdict, details: e.details });
   }
 
+  // --- Part 2 upstream path (only for runs that began with state resolution) --
+  const part2 = buildStateResolutionPath(events, addNode, addEdge, teamVerdict);
+  const off = part2 ? PART2_OFFSET : 0;
+
   // --- Column 0: Origin ------------------------------------------------------
-  const originLabel =
-    monitorData?.label ??
-    started?.change.summary ??
-    "Request";
-  addNode({
-    id: "origin",
-    kind: "origin",
-    label: originLabel,
-    sublabel: started?.change.source,
-    column: 0,
-    active: true,
-  });
+  // In a Part 2 run, the materiality / hand-off node is the origin of the Part 1
+  // path, so the two halves read as one chain.
+  const originId = part2 ? part2.handoffId : "origin";
+  if (!part2) {
+    const originLabel =
+      monitorData?.label ??
+      started?.change.summary ??
+      "Request";
+    addNode({
+      id: "origin",
+      kind: "origin",
+      label: originLabel,
+      sublabel: started?.change.source,
+      column: 0,
+      active: true,
+    });
+  }
 
   // --- Column 1: State attributes that participated in routing ---------------
   // Derived from the keys of the matrix rules that actually matched.
@@ -257,10 +286,15 @@ function buildFromEvents(events: RunEvent[], roster: RosterEntry[]): GovGraph {
         id: stateId,
         kind: "state",
         label: key === "always" ? "always" : `${key} = ${value}`,
-        column: 1,
+        column: off + 1,
         active: true,
       });
-      addEdge({ id: `e:origin->${stateId}`, source: "origin", target: stateId });
+      addEdge({
+        id: `e:${originId}->${stateId}`,
+        source: originId,
+        target: stateId,
+        label: part2 && key !== "always" ? "hand-off" : undefined,
+      });
     }
   }
 
@@ -272,7 +306,7 @@ function buildFromEvents(events: RunEvent[], roster: RosterEntry[]): GovGraph {
       id: `agent:${r.id}`,
       kind: "agent",
       label: r.name,
-      column: 2,
+      column: off + 2,
       active: invoked,
       verdict: invoked ? res?.verdict : undefined,
     });
@@ -302,10 +336,23 @@ function buildFromEvents(events: RunEvent[], roster: RosterEntry[]): GovGraph {
     id: "outcome",
     kind: "outcome",
     label: teamVerdict,
-    column: 4,
+    column: off + 4,
     active: true,
     verdict: teamVerdict,
   });
+
+  // Part 2 runs that never reached the agent team (not material, or state not
+  // established) connect straight to the outcome.
+  if (part2?.bypass) {
+    addEdge({
+      id: `e:${part2.bypass.from}->outcome`,
+      source: part2.bypass.from,
+      target: "outcome",
+      label: part2.bypass.label,
+      verdict: teamVerdict,
+      emphasized: emphasize,
+    });
+  }
 
   const policyVerdict = new Map<string, Verdict>();
   for (const r of roster) {
@@ -332,7 +379,7 @@ function buildFromEvents(events: RunEvent[], roster: RosterEntry[]): GovGraph {
         id: policyId,
         kind: "policy",
         label: p,
-        column: 3,
+        column: off + 3,
         active: true,
         verdict: v,
       });
@@ -375,6 +422,9 @@ function buildFromEvents(events: RunEvent[], roster: RosterEntry[]): GovGraph {
     if (a.coverageGap && a.fallback) {
       stewardLabels.set(a.fallback, "coverage gap → governance lead");
     }
+    if (a.humanReview) {
+      stewardLabels.set(a.humanReview.steward, "state review → governance lead");
+    }
 
     for (const [name, context] of stewardLabels) {
       const stewardId = `steward:${name}`;
@@ -383,7 +433,7 @@ function buildFromEvents(events: RunEvent[], roster: RosterEntry[]): GovGraph {
         kind: "steward",
         label: name,
         sublabel: context,
-        column: 5,
+        column: off + 5,
         active: true,
         verdict: teamVerdict,
       });
@@ -398,6 +448,178 @@ function buildFromEvents(events: RunEvent[], roster: RosterEntry[]): GovGraph {
   }
 
   return { nodes, edges };
+}
+
+// --- Part 2: the upstream state-resolution path ------------------------------
+
+interface Part2Path {
+  /** The node the Part 1 routing path grows from (the materiality hand-off). */
+  handoffId: string;
+  /** Set when the run never reached the agent team. */
+  bypass?: { from: string; label: string };
+}
+
+/**
+ * Event → resolvers → changed state attributes → materiality. Returns null for
+ * Part 1 runs (no observed_event), so their graphs are built exactly as before.
+ * Resolver→attribute edges carry the attribute's confidence, so the graph shows
+ * which resolver established each fact and how confident it was.
+ */
+function buildStateResolutionPath(
+  events: RunEvent[],
+  addNode: (n: GraphNode) => void,
+  addEdge: (e: GraphEdge) => void,
+  teamVerdict: Verdict
+): Part2Path | null {
+  const observed = find(events, "observed_event");
+  if (!observed) return null;
+
+  const started = find(events, "state_resolution_started");
+  const assembled = find(events, "state_assembled");
+  const deltaEvent = find(events, "state_delta");
+  const materialityEvent = find(events, "materiality");
+  const emphasize = teamVerdict !== "PASS";
+
+  // Column 0 — the observed event.
+  const oc = observed.event.observed_change;
+  addNode({
+    id: "event",
+    kind: "event",
+    label: `${observed.event.event_id} · ${observed.event.event_type}`,
+    sublabel: `${oc.source_system} → ${oc.destination_system} (${oc.mechanism})`,
+    column: 0,
+    active: true,
+  });
+
+  // Column 1 — the four resolvers, each with its status.
+  const resultsById = new Map<string, Extract<RunEvent, { type: "resolver_result" }>["result"]>();
+  for (const e of events) {
+    if (e.type === "resolver_result") resultsById.set(e.result.resolverId, e.result);
+  }
+  for (const r of started?.resolvers ?? []) {
+    const res = resultsById.get(r.id);
+    const method = (res?.method ?? r.method) === "model" ? "model" : "lookup";
+    addNode({
+      id: `resolver:${r.id}`,
+      kind: "resolver",
+      label: r.name,
+      sublabel: res ? `${res.status} · ${method}` : `running · ${method}`,
+      column: 1,
+      active: true,
+      status: res?.status,
+    });
+    addEdge({ id: `e:event->resolver:${r.id}`, source: "event", target: `resolver:${r.id}` });
+  }
+
+  // State could not be established: resolvers → "state not assembled" → outcome.
+  if (assembled && !assembled.ok) {
+    addNode({
+      id: "delta:unassembled",
+      kind: "delta",
+      label: `State ${assembled.status}`,
+      sublabel: "stopped before routing",
+      column: 2,
+      active: true,
+      status: assembled.status === "assembled" ? undefined : (assembled.status as ResolverStatus),
+    });
+    for (const [id, res] of resultsById) {
+      if (res.status === "resolved") continue;
+      addEdge({
+        id: `e:resolver:${id}->delta:unassembled`,
+        source: `resolver:${id}`,
+        target: "delta:unassembled",
+        label: res.status,
+        verdict: teamVerdict,
+        emphasized: true,
+      });
+    }
+    return { handoffId: "delta:unassembled", bypass: { from: "delta:unassembled", label: "human review" } };
+  }
+
+  // Column 2 — changed attributes (emphasized) plus one "unchanged" summary node.
+  const provenance = assembled?.provenance ?? {};
+  const material = new Set(materialityEvent?.result.materialChanges ?? []);
+  const entries = deltaEvent?.delta.entries ?? [];
+  const first = deltaEvent?.delta.firstObservation ?? false;
+  const unchanged = entries.filter((e) => !e.changed);
+
+  for (const e of entries.filter((x) => x.changed)) {
+    const id = `delta:${e.attribute}`;
+    addNode({
+      id,
+      kind: "delta",
+      label: e.attribute,
+      sublabel: first ? `new: ${fmt(e.current)}` : `${fmt(e.prior)} → ${fmt(e.current)}`,
+      column: 2,
+      active: true,
+      status: "changed",
+    });
+    const p = provenance[e.attribute];
+    if (p) {
+      addEdge({
+        id: `e:resolver:${p.resolver}->${id}`,
+        source: `resolver:${p.resolver}`,
+        target: id,
+        label: p.confidence.toFixed(2),
+      });
+    }
+  }
+  if (unchanged.length) {
+    addNode({
+      id: "delta:unchanged",
+      kind: "delta",
+      label: "Unchanged",
+      sublabel: unchanged.map((e) => e.attribute).join(", "),
+      column: 2,
+      active: true,
+      status: "unchanged",
+    });
+    const sources = new Set(
+      unchanged.map((e) => provenance[e.attribute]?.resolver).filter(Boolean) as string[]
+    );
+    for (const r of sources) {
+      addEdge({
+        id: `e:resolver:${r}->delta:unchanged`,
+        source: `resolver:${r}`,
+        target: "delta:unchanged",
+      });
+    }
+  }
+
+  // Column 3 — the materiality filter (the hand-off into Part 1).
+  if (!materialityEvent) return { handoffId: "materiality" };
+  const m = materialityEvent.result;
+  addNode({
+    id: "materiality",
+    kind: "materiality",
+    label: `Material change: ${m.material ? "YES" : "NO"}`,
+    sublabel: m.material
+      ? `${m.materialChanges.length} material → decision rights`
+      : "governance not invoked",
+    column: 3,
+    active: true,
+    status: m.material ? "material" : "not_material",
+  });
+  for (const e of entries.filter((x) => x.changed)) {
+    const isMaterial = material.has(e.attribute);
+    addEdge({
+      id: `e:delta:${e.attribute}->materiality`,
+      source: `delta:${e.attribute}`,
+      target: "materiality",
+      label: isMaterial ? "material" : "not material",
+      verdict: isMaterial && emphasize ? teamVerdict : undefined,
+      emphasized: isMaterial && emphasize,
+    });
+  }
+
+  return m.material
+    ? { handoffId: "materiality" }
+    : { handoffId: "materiality", bypass: { from: "materiality", label: "not material" } };
+}
+
+function fmt(v: unknown): string {
+  if (v === undefined) return "—";
+  return typeof v === "string" ? v : JSON.stringify(v);
 }
 
 function prettyRole(role: string): string {

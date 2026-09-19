@@ -1,0 +1,20 @@
+# resolvers/purpose.yaml
+id: purpose_resolver
+name: Purpose Resolver
+question: Why is the data being accessed, moved, or processed?
+
+# Purpose is rarely recorded authoritatively. It has to be interpreted from
+# descriptions, application function and ownership, so this resolver always
+# reasons with the model (§13, §31).
+method: model
+model_fallback: false
+
+evidence_families: [business_context, relationship_evidence]
+
+outputs:
+  processing_purpose: { taxonomy: processing_purpose }
+
+guardrails:
+  - Determines the LIKELY purpose. Must NOT decide whether that purpose is
+    authorized, approved, or lawful. That is a downstream governance judgment.
+  - Must cite the specific evidence keys that support the purpose.

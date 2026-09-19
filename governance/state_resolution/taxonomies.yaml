@@ -1,0 +1,42 @@
+# taxonomies.yaml
+# Allowed values for resolved attributes. A resolver output outside these values
+# is treated as unresolved and never accepted as state. Kept deliberately small.
+
+classification:
+  values: [public, internal, confidential_business, personal_data, sensitive_personal_data]
+  # Maps catalog labels to taxonomy values.
+  catalog_mapping:
+    Public: public
+    Internal: internal
+    Confidential: confidential_business
+    PII: personal_data
+    SPI: sensitive_personal_data
+  # Taxonomy values that mean "this is personal data" (drives contains_pii).
+  personal_values: [personal_data, sensitive_personal_data]
+  # Precedence when fields differ: the most sensitive value describes the set.
+  precedence: [sensitive_personal_data, personal_data, confidential_business, internal, public]
+
+recipient_type:
+  values:
+    - internal_user
+    - internal_application
+    - external_processor
+    - external_partner
+    - customer
+    - agent
+    - unknown
+  # Deterministic lookup: registry relationship + processing role -> recipient type.
+  registry_mapping:
+    - { relationship_type: third_party_vendor, processing_role: data_processor, recipient_type: external_processor }
+    - { relationship_type: third_party_vendor, processing_role: data_controller, recipient_type: external_partner }
+    - { relationship_type: business_partner, recipient_type: external_partner }
+    - { relationship_type: internal_system, recipient_type: internal_application }
+
+processing_purpose:
+  values:
+    - customer_service
+    - transaction_processing
+    - marketing
+    - analytics
+    - fraud_prevention
+    - legal_compliance

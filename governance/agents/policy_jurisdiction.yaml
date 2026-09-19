@@ -14,6 +14,8 @@ permitted_scope:
   - Read the diff, the schema baseline, and each asset's state_attributes.
   - Read policies.yaml (usage, sharing, retention, cross-border rules).
   - Read country/jurisdiction values on the data to assess applicability.
+  - Read decision evidence supplied with the change (vendor agreements, data
+    processing agreements, approved processing purposes, authorizations).
 
 guardrails:
   - Introducing PII consumable in a jurisdiction lacking a lawful basis
