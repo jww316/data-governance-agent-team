@@ -1,0 +1,25 @@
+# resolvers/classification.yaml
+# Resolver contract: a narrow question, explicit allowed evidence, explicit outputs.
+# Same shape for all four resolvers (PART2_STATE_RESOLUTION_DESIGN.md §9).
+id: classification_resolver
+name: Classification Resolver
+question: What kind of data is this?
+
+# authoritative_lookup: resolve deterministically from an authoritative source of
+# record. If that source does not cover the evidence, fall back to the model
+# (model_fallback). "model" means the resolver always reasons with the model.
+method: authoritative_lookup
+model_fallback: true
+authoritative_source: "enterprise catalog classifications (authoritative: true)"
+
+# Only these evidence families (plus the observed event) are shown to this resolver.
+evidence_families: [data_evidence]
+
+outputs:
+  contains_pii: { type: boolean }
+  classification: { taxonomy: classification }
+
+guardrails:
+  - May determine that data is personal. Must NOT decide whether using that data
+    is legally or organizationally permitted.
+  - Must cite the catalog entries or taxonomy that support each attribute.

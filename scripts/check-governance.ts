@@ -2,7 +2,7 @@
  * M1 acceptance: print the five contracts, policies, matrix, scenarios, schema —
  * proving they parse correctly. Run with: npm run check:governance
  */
-import { loadGovernance } from "../lib/governance";
+import { loadGovernance, loadStateResolution } from "../lib/governance";
 
 function main() {
   const gov = loadGovernance();
@@ -47,6 +47,17 @@ function main() {
     );
   }
 
+  const sr = loadStateResolution();
+  console.log("\n=== PART 2 — STATE RESOLUTION ===");
+  for (const r of sr.resolvers) {
+    console.log(
+      `  ${r.id} [${r.method}${r.model_fallback ? " + model fallback" : ""}] -> ${Object.keys(r.outputs).join(", ")}`
+    );
+  }
+  console.log(`  confidence threshold: ${sr.assembly.confidence_threshold}`);
+  console.log(`  materiality rules: ${Object.keys(sr.materiality.materiality_rules).length}`);
+  console.log(`  scenario: ${sr.scenario.id} -> expected ${sr.scenario.expected_verdict}`);
+
   // Sanity assertions.
   const assert = (cond: boolean, msg: string) => {
     if (!cond) {
@@ -54,6 +65,11 @@ function main() {
       process.exit(1);
     }
   };
+  assert(sr.resolvers.length === 4, "expected 4 resolver contracts");
+  assert(
+    sr.assembly.required_resolvers.every((id) => sr.resolversById[id]),
+    "every required resolver has a contract"
+  );
   assert(gov.agents.length === 5, "expected 5 agent contracts");
   assert(Object.keys(gov.schema.tables).length === 2, "expected 2 tables");
   assert(gov.scenarios.length === 3, "expected 3 scenarios");

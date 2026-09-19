@@ -46,6 +46,50 @@ built purely from the run's `RunEvent` stream (`lib/graph.ts`) — no new engine
 logic — and is **persisted on each audit entry**, so any past decision reopens as
 its exact traceable path.
 
+## Part 2 — state resolution (M9)
+
+Part 1 assumes the governed state of the data is already known. Part 2 adds the
+missing upstream step: **how the system establishes that state** before the
+decision-rights matrix routes anything. The design is in
+[`PART2_STATE_RESOLUTION_DESIGN.md`](./PART2_STATE_RESOLUTION_DESIGN.md).
+
+```
+observed event → evidence → 4 resolvers (parallel) → deterministic assembler
+  → prior vs. new state (delta) → materiality filter
+  → EXISTING decision-rights matrix → EXISTING agent team → PASS / BLOCK / ESCALATE
+```
+
+The one scenario is **CRM → CampaignCloud**. A new API integration sends CRM
+customer names and emails to an external marketing SaaS hosted in Germany. The
+data itself doesn't change, but its context does, so its governed state changes.
+
+- **Four resolvers** each answer one narrow question: what kind of data, where,
+  who receives it, and why. Classification, Location and Recipient resolve by
+  **authoritative lookup** (catalog, system inventory, vendor registry). They fall
+  back to the model only when their source of record doesn't cover the evidence.
+  **Purpose** is a real model call, because purpose has to be interpreted. The UI
+  labels each resolver as a lookup or a model, and each attribute carries its own
+  confidence and evidence.
+- **The assembler, delta and materiality filter are deterministic**, with no LLM.
+  They're driven by YAML. Here, destination (US → Germany), recipient
+  (internal → external processor) and purpose (customer service → marketing)
+  changed, and all three are material.
+- **Hand-off:** the resolved state becomes an ordinary `Change`, and the
+  unchanged matrix routes it to Classification & PII and Policy & Jurisdiction
+  (then Assignment). The Policy agent also receives **decision evidence** (vendor
+  agreement, DPA, approved purposes, `marketing_authorization: unknown`). It
+  can establish the facts but not that marketing is authorized, so it returns
+  **ESCALATE** to the Privacy Steward + DPO.
+- **Fails safe.** An unresolved, conflicted or failed resolver stops the run
+  before routing, and it goes to the governance lead for human review. A
+  non-material change is logged but doesn't invoke the agent team.
+
+**To run it:** open the **Part 2 · State resolution** tab and click
+**Detect integration & resolve state**. The five stages render, then the run
+continues into the usual live log, relationship path (now with the upstream
+columns), verdict and audit entry. Opening the audit entry replays the whole
+chain. Each run makes four model calls: the Purpose resolver and three agents.
+
 ## The governed data (the source of truth)
 
 Everything the engine enforces lives as declarative YAML under
@@ -59,6 +103,11 @@ running anything:
 | `policies.yaml` | PII, cross-border, retention, and quality policies the agents enforce. |
 | `decision_rights_matrix.yaml` | Agent routing + steward resolution. |
 | `scenarios.yaml` | The three file-landing templates for Feature 2. |
+| `state_resolution/resolvers/*.yaml` | Part 2: the four resolver contracts (question / method / allowed evidence / outputs / guardrails). |
+| `state_resolution/taxonomies.yaml` | Part 2: allowed classification, recipient-type and purpose values. |
+| `state_resolution/assembly.yaml` | Part 2: confidence threshold (demo configuration only) and required resolvers/attributes. |
+| `state_resolution/materiality.yaml` | Part 2: which attribute changes are governance-material. |
+| `state_resolution/scenario_crm_campaigncloud.yaml` | Part 2: observed event, evidence, prior state, decision evidence. |
 
 The engine **reads** these files; it never hardcodes their content.
 
@@ -107,10 +156,14 @@ npm run check:routing        # M2 — routing is matrix-driven (no API key neede
 npm run check:agent          # M3 — a single real agent call BLOCKs / PASSes
 npm run check:orchestrator   # M4 — three scenarios produce PASS / BLOCK / ESCALATE
 npm run check:graph          # M8 — each scenario's relationship graph matches its events
+npm run check:state-resolution  # M9 — resolvers, assembler, delta, materiality, pipeline (offline)
+npm run check:part2          # M9 — CRM → CampaignCloud end to end → ESCALATE
 ```
 
-`check:agent` and `check:orchestrator` make real Anthropic calls, so they need
-`ANTHROPIC_API_KEY` in `.env.local`.
+`check:agent`, `check:orchestrator`, `check:graph` and `check:part2` make real
+Anthropic calls, so they need `ANTHROPIC_API_KEY` in `.env.local`.
+`check:state-resolution` needs no key: model responses come from fixtures, and
+the agent team and audit store are stubbed.
 
 ## Architecture
 
@@ -128,10 +181,13 @@ lib/
   graph.ts             build the relationship graph from a run's events (M8)
   adapters.ts          turn each feature's input into a shared Change
   sse.ts               Server-Sent Events helper
+  resolvers.ts         Part 2: the four state resolvers (lookup or model)
+  state.ts             Part 2: deterministic assembler, derived state, delta, materiality, hand-off
+  stateResolution.ts   Part 2: the upstream pipeline → hands off to runGovernance()
 app/
   page.tsx             server component; loads the governance view
-  components/          the two-feature UI (left definitions, right execution)
-  api/gate|monitor|audit/route.ts   the streaming endpoints
+  components/          the UI (left definitions, right execution)
+  api/gate|monitor|state-resolution|audit/route.ts   the streaming endpoints
 ```
 
 The **orchestrator is feature-agnostic**: it operates on a normalized `Change`, so
@@ -185,6 +241,50 @@ Decisions made during the autonomous build, per IMPLEMENTATION.md §13:
   existed have no saved graph, so `/api/audit` reconstructs one from their stored
   `agentResults` (re-deriving the matched matrix rules by reverse-mapping the
   invoked agents) — so every past decision still replays as a path.
+
+- **M9 state resolution (Part 2)**, decisions:
+  - **Resolver method.** Classification, Location and Recipient use
+    *authoritative lookup* in deterministic code, with a *model fallback* when the
+    source of record doesn't cover the evidence. Purpose always uses the model.
+    Each result records its method, and the UI shows it, so scripted logic is
+    never presented as model reasoning (DESIGN.md §10). Every model-backed output
+    is checked against the contract, the taxonomy and the 0.90 threshold. A
+    missing or bad value, or a confidence below 0.90, makes the resolver
+    `unresolved`. A technical failure is a fourth status, `failed`, which never
+    produces state.
+  - **Two additive governance-data changes**, both needed for a reliable
+    ESCALATE rather than a BLOCK: a `purpose_limitation` policy (authorization
+    unknown → ESCALATE, explicitly denied → BLOCK), and one `permitted_scope`
+    line letting the Policy & Jurisdiction agent read decision evidence. Decision
+    evidence goes only to agents whose contract permits it, so the
+    Classification agent never sees it. The matrix and the other contracts are
+    unchanged.
+  - **Hand-off vocabulary.** The matrix routes on
+    `cross_jurisdictional_consumption`, and the hand-off sets it to the resolved
+    `cross_border` fact. The matrix routes to Classification & PII and Policy &
+    Jurisdiction. Relationship & Lineage isn't invoked because there's no foreign
+    key, and it isn't forced in (design §22).
+  - **Orchestrator integration** is one optional `RunHooks.upstream` field. It
+    prepends the Part 2 events to the run's collected stream, so the saved graph
+    and the audit entry cover the whole chain. Routing, agents and aggregation
+    are untouched.
+  - **Paths that skip the agent team.** A non-material change is audited as
+    PASS with no agents invoked, labelled "not material, governance not invoked".
+    Unresolved, conflicted or failed state is audited as ESCALATE to the matrix's
+    existing `governance_lead` (`StewardAssignment.humanReview`). No second
+    assignment mechanism was added.
+  - **Tests** follow the repo's `scripts/check-*.ts` convention, and no test
+    framework was added. The offline check substitutes fixture model responses
+    through the injectable `ModelCall`.
+  - **Live graph repaint.** During a live run the outcome node exists before
+    the verdict arrives. In testing, an in-place PASS → ESCALATE label update was
+    not repainted by the browser, although the DOM was correct. `GovGraphView`
+    now remounts the flow when the outcome changes. This also applies to Part 1
+    live graphs.
+  - **Observed in live runs:** the Classification & PII agent also tends to
+    ESCALATE this scenario, citing the cross-border/purpose question rather than
+    classification. The team verdict and owners are the same either way. Tighten
+    its contract only if a PASS on that dimension matters for the recording.
 
 ### Conflicts reconciled (per IMPLEMENTATION.md's "follow DESIGN.md on conflict")
 

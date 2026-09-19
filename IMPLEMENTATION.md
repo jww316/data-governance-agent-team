@@ -295,6 +295,17 @@ Build in order. Do not advance until acceptance passes.
   the matrix edge that triggered each agent is labeled; opening a past audit entry
   re-renders its graph.
 
+- **M9 — State resolution (Part 2).** An upstream stage that establishes the
+  governed state of the data before the matrix routes it: observed event →
+  evidence → four resolvers → deterministic assembler → delta → materiality →
+  hand-off to the unchanged Part 1 control plane. Full spec in
+  `PART2_STATE_RESOLUTION_DESIGN.md`. Summary in §16.
+  *Accept:* the CRM → CampaignCloud scenario runs from the UI and ends in
+  ESCALATE to the Privacy Steward + DPO. The audit entry replays event →
+  resolvers → state → delta → materiality → routing → agents → steward.
+  `check:state-resolution` (offline) and `check:part2` (live) pass, and every
+  Part 1 check still passes.
+
 ## 14. Definition of done
 
 - Both features run locally and record cleanly, showing PASS, BLOCK, and ESCALATE.
@@ -389,3 +400,27 @@ entry so historical runs replay identically.
 - State→agent edges are labeled with the matched matrix rule.
 - Opening a past audit entry re-renders its graph identically to the live run.
 - Renders cleanly at recording resolution.
+
+---
+
+## 16. State resolution (M9) — as built
+
+Governed by `PART2_STATE_RESOLUTION_DESIGN.md`. This section records where each
+piece lives.
+
+| Stage | Where | Model? |
+|-------|-------|--------|
+| Observed event, evidence, prior state, decision evidence | `governance/state_resolution/scenario_crm_campaigncloud.yaml` | — |
+| Resolver contracts / taxonomies | `governance/state_resolution/resolvers/*.yaml`, `taxonomies.yaml` | — |
+| Four resolvers, run in parallel | `lib/resolvers.ts` | Purpose always; others only as fallback |
+| Assemble / derive / delta / materiality / hand-off | `lib/state.ts` (config: `assembly.yaml`, `materiality.yaml`) | No |
+| Pipeline + stage events | `lib/stateResolution.ts` → `runGovernance(change, emit, { upstream })` | — |
+| Stage view / graph columns | `app/components/StateResolutionView.tsx`, `lib/graph.ts` | — |
+
+New `RunEvent`s: `observed_event`, `state_resolution_started`,
+`resolver_started`, `resolver_result` (its status field covers resolved,
+unresolved, conflicted and failed, following the `agent_result` pattern),
+`state_assembled`, `state_delta`, `materiality`, `state_resolution_complete`,
+`governance_handoff`. The stage events are stored on
+`AuditEntry.stateResolution` for replay. They hold concise summaries only, never
+hidden model reasoning.

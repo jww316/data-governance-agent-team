@@ -7,9 +7,10 @@ import { LeftPanel } from "./LeftPanel";
 import { GateEditor } from "./GateEditor";
 import { MonitorPanel } from "./MonitorPanel";
 import { AuditPanel } from "./AuditPanel";
+import { StateResolutionPanel } from "./StateResolutionPanel";
 import "./console.css";
 
-type Tab = "gate" | "monitor";
+type Tab = "gate" | "monitor" | "state";
 
 export function Console({ view }: { view: GovernanceView }) {
   const [tab, setTab] = useState<Tab>("monitor");
@@ -56,12 +57,20 @@ export function Console({ view }: { view: GovernanceView }) {
             >
               Feature 1 · Sync gate (PR)
             </button>
+            <button
+              className={tab === "state" ? "active" : ""}
+              onClick={() => setTab("state")}
+            >
+              Part 2 · State resolution
+            </button>
           </div>
 
           {tab === "monitor" ? (
             <MonitorPanel view={view} onComplete={refreshAudit} />
-          ) : (
+          ) : tab === "gate" ? (
             <GateEditor view={view} onComplete={refreshAudit} />
+          ) : (
+            <StateResolutionPanel view={view} onComplete={refreshAudit} />
           )}
 
           <AuditPanel entries={entries} />

@@ -56,13 +56,15 @@ export function RunView({
         </div>
       )}
 
-      {state.events.some((e) => e.type === "routing") && (
+      {state.events.some((e) => e.type === "routing" || e.type === "observed_event") && (
         <div className="graph-section">
           <div className="stream-head">
             <div className="section-label" style={{ margin: 0 }}>
               Relationship path
             </div>
-            <GraphLegend />
+            <GraphLegend
+              stateResolution={state.events.some((e) => e.type === "observed_event")}
+            />
           </div>
           <GovGraphView events={state.events} roster={roster} />
         </div>
@@ -186,6 +188,29 @@ function EventRow({ event, events }: { event: RunEvent; events: RunEvent[] }) {
         </div>
       );
 
+    // Part 2: the stages render in StateResolutionView. The log shows one row
+    // for the hand-off, where the run crosses into the Part 1 control plane.
+    case "governance_handoff":
+      return (
+        <Row
+          icon="⇢"
+          title="Hand-off to the decision-rights matrix"
+          detail="The resolved, material state is now the routing input for the existing control plane."
+        />
+      );
+    case "state_resolution_complete":
+      return event.outcome === "handed_off" ? null : (
+        <Row icon="■" title="State resolution stopped" detail={event.message} />
+      );
+    case "observed_event":
+    case "state_resolution_started":
+    case "resolver_started":
+    case "resolver_result":
+    case "state_assembled":
+    case "state_delta":
+    case "materiality":
+      return null;
+
     // Summarized in the result block; not shown inline.
     case "assignment":
     case "team_verdict":
@@ -229,6 +254,9 @@ function StewardList({ assignment }: { assignment: StewardAssignment }) {
   }
   if (assignment.coverageGap && assignment.fallback) {
     rows.push(`Coverage gap → Governance Lead: ${assignment.fallback}`);
+  }
+  if (assignment.humanReview) {
+    rows.push(`State review → Governance Lead: ${assignment.humanReview.steward}`);
   }
   if (rows.length === 0) return null;
   return (

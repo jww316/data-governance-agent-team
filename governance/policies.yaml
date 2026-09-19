@@ -47,6 +47,16 @@ cross_border:
       BLOCK for a missing lawful basis where the transfer itself is already
       approved (no novel cross-border element).
 
+purpose_limitation:
+  description: Personal data may be processed only for approved purposes.
+  rule: >
+    PII processed for a purpose listed in the asset's approved processing purposes
+    satisfies this policy. PII processed for a purpose NOT on that list: if
+    authorization for that purpose is explicitly DENIED = BLOCK; if authorization
+    is UNKNOWN or cannot be established from the decision evidence = ESCALATE for
+    human review (the reserved 20%). Never assume an authorization that the
+    evidence does not show, and never infer a denial the evidence does not state.
+
 quality_rules:
   non_negative: Value must be >= 0.
   currency_scale_2: Numeric must have at most 2 decimal places.

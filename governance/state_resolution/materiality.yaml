@@ -1,0 +1,24 @@
+# materiality.yaml
+# The Governance Materiality Filter (§21). It answers one question,
+# deterministically: did anything change that could alter governance obligations?
+# A non-material change is logged but does NOT invoke the governance agent team.
+# This keeps routine technical churn from creating governance noise.
+
+materiality_rules:
+  contains_pii:          { change_is_material: true,  reason: Personal-data status changed }
+  classification:        { change_is_material: true,  reason: Classification changed }
+  origin_location:       { change_is_material: true,  reason: Origin geography changed }
+  destination_location:  { change_is_material: true,  reason: Destination geography changed }
+  recipient_type:        { change_is_material: true,  reason: A different kind of party now receives the data }
+  processing_purpose:    { change_is_material: true,  reason: The data is used for a different purpose }
+  recipient_id:          { change_is_material: true,  reason: A different recipient receives the data }
+  physical_server:       { change_is_material: false, reason: Technical placement only }
+  pipeline_run_id:       { change_is_material: false, reason: Operational metadata only }
+
+# An attribute with no rule is treated as material, so the filter fails safe:
+# an unrecognized change is reviewed rather than silently dropped.
+default_change_is_material: true
+
+# No prior state (a first observation of this relationship): the new relationship
+# itself is treated as material, so it is governed at least once (§30).
+first_observation_is_material: true

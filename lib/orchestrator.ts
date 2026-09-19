@@ -18,7 +18,7 @@ import {
 import { selectAgents } from "./routing";
 import { runAgent } from "./agents";
 import { resolveStewards } from "./steward";
-import { appendAudit } from "./audit";
+import { StateResolutionAudit, appendAudit } from "./audit";
 import { buildGraph } from "./graph";
 
 export type Emit = (event: RunEvent) => void | Promise<void>;
@@ -41,6 +41,16 @@ export interface RunHooks {
     agentResults: AgentResult[];
     assignment: StewardAssignment;
   }) => Promise<GithubOutcome>;
+  /**
+   * Part 2 only: the upstream state-resolution run that produced this change.
+   * Its events are prepended to this run's collected stream, so the saved graph
+   * and audit entry show the whole chain. Routing and agent logic are unaffected.
+   */
+  upstream?: {
+    events: RunEvent[];
+    summary: string;
+    stateResolution: StateResolutionAudit;
+  };
 }
 
 export interface RunResult {
@@ -88,15 +98,16 @@ export async function runGovernance(
 
   // Collect every emitted event so the relationship graph can be built from the
   // exact same stream the UI saw (§15.4) and persisted for replay.
-  const collected: RunEvent[] = [];
+  const collected: RunEvent[] = [...(hooks.upstream?.events ?? [])];
   const emit: Emit = async (event) => {
     collected.push(event);
     await rawEmit(event);
   };
+  const summary = hooks.upstream?.summary ?? summarize(change);
 
   await emit({
     type: "run_started",
-    change: { summary: summarize(change), source: change.source },
+    change: { summary, source: change.source },
   });
 
   // --- Routing (deterministic, matrix-driven) -------------------------------
@@ -205,12 +216,13 @@ export async function runGovernance(
   const auditEntry = appendAudit({
     source: change.source,
     asset: change.asset,
-    summary: summarize(change),
+    summary,
     agentResults: allResults,
     teamVerdict,
     stewards: assignment,
     github,
     graph,
+    stateResolution: hooks.upstream?.stateResolution,
   });
   await emit({ type: "audit_written", auditId: auditEntry.id });
   await emit({ type: "run_complete", verdict: teamVerdict });
